@@ -1,0 +1,6 @@
+.idea
+
+# ignore data
+dataset/
+
+*.pth
