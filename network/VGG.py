@@ -1,31 +1,32 @@
 import torch
 import torch.nn as nn
+from Senet import SELayer
+
 
 cfgs = {
     'vgg-11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'vgg-13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'vgg-16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
-    'vgg=19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+    'vgg-19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
 }
 
 
 class VGG(nn.Module):
 
-    def __init__(self, features, num_classes=10, init_weights=True):
+    def __init__(self, features, num_classes=10):
         super(VGG, self).__init__()
         self.features = features
-        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+        self.avgpool = nn.AdaptiveAvgPool2d((7, 7)) # make sample shape from different shape of
         self.classifier = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096),
+            nn.Linear(512 * 7 * 7, 1024),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(4096, 4096),
+            # nn.Linear(4096, 4096),
+            nn.Linear(1024, 1024),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(4096, num_classes),
+            nn.Linear(1024, num_classes),
         )
-        if init_weights:
-            self._initialize_weights()
 
     def forward(self, x):
         x = self.features(x)
@@ -34,28 +35,18 @@ class VGG(nn.Module):
         x = self.classifier(x)
         return x
 
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
 
-
-def make_layers(cfg, batch_norm=False):
+def make_layers(cfg, batch_norm=False, use_se=False):
     """
     make feature layers
     """
     layers = []
     in_channels = 3
-    for v in cfg:
+    for i, v in enumerate(cfg):
         if v == 'M':
+            if use_se:
+                channels = cfg[i-1]
+                layers += [SELayer(channels)]
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
@@ -67,13 +58,16 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 
-def get_vgg(cfg, batch_norm: bool, num_classes: int, init_weight: bool):
+def get_vgg(cfg, batch_norm: bool, num_classes: int, use_se=False):
     """
     Make vgg's feature layers
     """
-    return VGG(make_layers(cfgs.get(cfg), batch_norm), num_classes, init_weight)
+    return VGG(make_layers(cfgs.get(cfg), batch_norm, use_se=use_se), num_classes)
 
 
 if __name__ == '__main__':
     model = get_vgg('vgg-11', True, 10, True)
+    imags = torch.rand((10, 3, 32, 32))
+    out = model(imags)
     print(model)
+    print(out.shape)
